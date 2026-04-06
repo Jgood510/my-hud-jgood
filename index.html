@@ -1,0 +1,956 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jason T Moore — Trading HUD</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Rajdhani:wght@300;400;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --c:#00ffea;--cy:#ffe600;--cg:#00ff88;--cr:#ff2d55;--cp:#bf5fff;--co:#ff6b2b;--cb:#00aaff;
+  --bg0:#000d1a;--bd:rgba(0,255,234,0.14)
+}
+body{background:var(--bg0);overflow-x:hidden}
+.hud{background:var(--bg0);font-family:'Rajdhani',sans-serif;color:var(--c);padding:10px;position:relative;overflow:hidden;min-height:100vh}
+.grid-bg{position:fixed;inset:0;pointer-events:none;z-index:0;background-image:linear-gradient(rgba(0,255,234,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,255,234,0.025) 1px,transparent 1px);background-size:55px 55px}
+.vignette{position:fixed;inset:0;pointer-events:none;z-index:0;background:radial-gradient(ellipse at center,transparent 25%,rgba(0,0,0,0.8) 100%)}
+.scanline{position:fixed;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,rgba(0,255,234,0.35) 50%,transparent);animation:scan 8s linear infinite;pointer-events:none;z-index:1}
+@keyframes scan{0%{top:-2px}100%{top:100vh}}
+canvas#sc{position:fixed;inset:0;pointer-events:none;z-index:0}
+
+/* ─── PANELS ─── */
+.p{position:relative;background:linear-gradient(135deg,rgba(0,255,234,0.04),rgba(0,25,55,0.65));border:1px solid var(--bd);padding:10px 12px;z-index:2;clip-path:polygon(10px 0%,calc(100% - 10px) 0%,100% 10px,100% 100%,0% 100%,0% 10px)}
+.p::before{content:'';position:absolute;top:0;left:10px;right:10px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,234,0.5),transparent)}
+.cx{position:absolute;width:8px;height:8px}
+.tl{top:-1px;left:-1px;border-top:2px solid var(--c);border-left:2px solid var(--c)}
+.tr{top:-1px;right:-1px;border-top:2px solid var(--c);border-right:2px solid var(--c)}
+.bl{bottom:-1px;left:-1px;border-bottom:2px solid var(--c);border-left:2px solid var(--c)}
+.br{bottom:-1px;right:-1px;border-bottom:2px solid var(--c);border-right:2px solid var(--c)}
+.plbl{font-family:'Orbitron',sans-serif;font-size:8px;letter-spacing:3px;color:rgba(0,255,234,0.38);text-transform:uppercase;margin-bottom:7px;display:flex;align-items:center;gap:6px}
+.plbl::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,rgba(0,255,234,0.2),transparent)}
+.ptag{display:inline-block;font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:2px;padding:2px 6px;border:1px solid}
+.tag-p{color:var(--cp);border-color:rgba(191,95,255,0.3);background:rgba(191,95,255,0.07)}
+.tag-pm{color:var(--co);border-color:rgba(255,107,43,0.3);background:rgba(255,107,43,0.07)}
+.tag-k{color:var(--cy);border-color:rgba(255,230,0,0.3);background:rgba(255,230,0,0.07)}
+.tag-f{color:var(--cb);border-color:rgba(0,170,255,0.3);background:rgba(0,170,255,0.07)}
+.pos{color:var(--cg)!important}.neg{color:var(--cr)!important}
+.spltr{height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,234,0.2),transparent);margin:6px 0}
+
+/* ─── HEADER ─── */
+.hdr{display:flex;align-items:center;justify-content:space-between;padding:6px 10px 10px;border-bottom:1px solid rgba(0,255,234,0.09);margin-bottom:10px;z-index:2;position:relative}
+.logo{font-family:'Orbitron',sans-serif;font-size:16px;font-weight:900;letter-spacing:5px;color:var(--c);text-shadow:0 0 25px rgba(0,255,234,0.6)}
+.logo .mid{color:var(--cy)}
+.logo-s{font-size:8px;letter-spacing:4px;color:rgba(0,255,234,0.28);margin-top:1px}
+.pills{display:flex;gap:6px;flex-wrap:wrap}
+.pill{font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 8px;border:1px solid;display:flex;align-items:center;gap:4px}
+.pp2{color:var(--cp);border-color:rgba(191,95,255,0.28);background:rgba(191,95,255,0.05)}
+.ppm{color:var(--co);border-color:rgba(255,107,43,0.28);background:rgba(255,107,43,0.05)}
+.pk{color:var(--cy);border-color:rgba(255,230,0,0.28);background:rgba(255,230,0,0.05)}
+.pf{color:var(--cb);border-color:rgba(0,170,255,0.28);background:rgba(0,170,255,0.05)}
+.dot{width:6px;height:6px;border-radius:50%;animation:blink 1.8s ease-in-out infinite}
+.dot.on{background:var(--cg);box-shadow:0 0 6px var(--cg);animation:none}
+.dot.off{background:rgba(255,45,85,0.5);animation:none}
+.dot.pulsing{background:var(--cy)}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.2}}
+.clk-big{font-family:'Orbitron',sans-serif;font-size:14px;color:var(--c);letter-spacing:3px;text-shadow:0 0 10px rgba(0,255,234,0.4)}
+.clk-s{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,255,234,0.35);letter-spacing:2px;text-align:right}
+
+/* ─── SETTINGS BUTTON ─── */
+.settings-btn{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;padding:5px 14px;border:1px solid rgba(0,255,234,0.35);background:rgba(0,255,234,0.06);color:var(--c);cursor:pointer;transition:all 0.2s;display:flex;align-items:center;gap:6px;margin-top:5px}
+.settings-btn:hover{background:rgba(0,255,234,0.12);border-color:var(--c)}
+.settings-btn.active{background:rgba(0,255,234,0.15);border-color:var(--c)}
+.gear{display:inline-block;animation:spin 4s linear infinite}
+@keyframes spin{0%{transform:rotate(0deg)}100%{transform:rotate(360deg)}}
+
+/* ─── SETTINGS PANEL ─── */
+.settings-overlay{display:none;margin-bottom:12px;z-index:10;position:relative}
+.settings-overlay.open{display:block}
+.settings-panel{background:linear-gradient(135deg,rgba(0,8,22,0.99),rgba(0,18,42,0.99));border:1px solid rgba(0,255,234,0.3);padding:22px;position:relative;clip-path:polygon(10px 0%,calc(100% - 10px) 0%,100% 10px,100% 100%,0% 100%,0% 10px)}
+.settings-panel::before{content:'';position:absolute;top:0;left:10px;right:10px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,234,0.7),transparent)}
+.sp-title{font-family:'Orbitron',sans-serif;font-size:13px;font-weight:700;letter-spacing:4px;color:var(--c);margin-bottom:4px}
+.sp-sub{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,255,234,0.4);letter-spacing:1px;margin-bottom:16px}
+.sp-warning{background:rgba(255,230,0,0.05);border:1px solid rgba(255,230,0,0.2);padding:10px 14px;margin-bottom:18px;display:flex;gap:12px;align-items:flex-start}
+.sp-warning-icon{color:var(--cy);font-size:16px;margin-top:1px}
+.sp-warning-txt{font-size:11px;color:rgba(255,230,0,0.8);line-height:1.6}
+.sp-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.api-block{border:1px solid rgba(0,255,234,0.1);padding:16px;background:rgba(0,255,234,0.02);position:relative}
+.api-block::before{content:'';position:absolute;top:0;left:8px;right:8px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,234,0.25),transparent)}
+.api-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.api-name{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px}
+.api-status{font-family:'Share Tech Mono',monospace;font-size:9px;padding:2px 8px;border:1px solid;letter-spacing:1px}
+.api-status.disconnected{color:rgba(255,45,85,0.7);border-color:rgba(255,45,85,0.25);background:rgba(255,45,85,0.05)}
+.api-status.connected{color:var(--cg);border-color:rgba(0,255,136,0.25);background:rgba(0,255,136,0.05)}
+.api-status.testing{color:var(--cy);border-color:rgba(255,230,0,0.25);background:rgba(255,230,0,0.05)}
+.api-status.error{color:var(--cr);border-color:rgba(255,45,85,0.3);background:rgba(255,45,85,0.08)}
+.field-group{margin-bottom:10px}
+.field-label{font-size:9px;color:rgba(0,255,234,0.38);letter-spacing:2px;text-transform:uppercase;margin-bottom:4px;font-family:'Share Tech Mono',monospace}
+.api-input{width:100%;background:rgba(0,0,10,0.6);border:1px solid rgba(0,255,234,0.15);color:var(--c);font-family:'Share Tech Mono',monospace;font-size:11px;padding:8px 10px;outline:none;letter-spacing:1px;transition:border-color 0.2s}
+.api-input:focus{border-color:rgba(0,255,234,0.5);background:rgba(0,255,234,0.04)}
+.api-input::placeholder{color:rgba(0,255,234,0.16)}
+.api-input.has-value{border-color:rgba(0,255,136,0.3)}
+.show-toggle{display:flex;align-items:center;gap:6px;margin-top:5px;cursor:pointer;width:fit-content;user-select:none}
+.show-toggle input{cursor:pointer;accent-color:var(--c)}
+.show-toggle span{font-size:9px;color:rgba(0,255,234,0.32);letter-spacing:1px;font-family:'Share Tech Mono',monospace}
+.hint{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,255,234,0.25);margin-top:6px;line-height:1.5;border-left:2px solid rgba(0,255,234,0.15);padding-left:8px}
+.connect-btn{width:100%;font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;padding:9px;border:1px solid;cursor:pointer;transition:all 0.2s;margin-top:8px;text-transform:uppercase}
+.connect-btn.plexy{color:var(--cp);border-color:rgba(191,95,255,0.3);background:rgba(191,95,255,0.06)}
+.connect-btn.plexy:hover{background:rgba(191,95,255,0.16);border-color:var(--cp)}
+.connect-btn.poly{color:var(--co);border-color:rgba(255,107,43,0.3);background:rgba(255,107,43,0.06)}
+.connect-btn.poly:hover{background:rgba(255,107,43,0.16);border-color:var(--co)}
+.connect-btn.kalshi{color:var(--cy);border-color:rgba(255,230,0,0.3);background:rgba(255,230,0,0.06)}
+.connect-btn.kalshi:hover{background:rgba(255,230,0,0.16);border-color:var(--cy)}
+.connect-btn.forex{color:var(--cb);border-color:rgba(0,170,255,0.3);background:rgba(0,170,255,0.06)}
+.connect-btn.forex:hover{background:rgba(0,170,255,0.16);border-color:var(--cb)}
+.disconnect-btn{width:100%;font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:1px;padding:7px;border:1px solid rgba(255,45,85,0.25);color:rgba(255,45,85,0.6);background:rgba(255,45,85,0.04);cursor:pointer;transition:all 0.2s;margin-top:6px}
+.disconnect-btn:hover{background:rgba(255,45,85,0.12);border-color:var(--cr);color:var(--cr)}
+.sp-footer{display:flex;justify-content:space-between;align-items:center;margin-top:18px;padding-top:14px;border-top:1px solid rgba(0,255,234,0.1)}
+.clear-btn{font-family:'Share Tech Mono',monospace;font-size:9px;padding:7px 16px;border:1px solid rgba(255,45,85,0.25);color:rgba(255,45,85,0.6);background:rgba(255,45,85,0.04);cursor:pointer;letter-spacing:1px;transition:all 0.2s}
+.clear-btn:hover{background:rgba(255,45,85,0.12);border-color:var(--cr);color:var(--cr)}
+.refresh-btn{font-family:'Orbitron',sans-serif;font-size:9px;letter-spacing:2px;padding:7px 18px;border:1px solid rgba(0,255,136,0.3);color:var(--cg);background:rgba(0,255,136,0.06);cursor:pointer;transition:all 0.2s}
+.refresh-btn:hover{background:rgba(0,255,136,0.14);border-color:var(--cg)}
+.sp-note{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,255,234,0.25);letter-spacing:1px}
+.log-box{background:rgba(0,0,0,0.5);border:1px solid rgba(0,255,234,0.1);padding:8px 10px;margin-top:16px;max-height:90px;overflow-y:auto;font-family:'Share Tech Mono',monospace}
+.log-line{font-size:9px;line-height:1.7;color:rgba(0,255,234,0.45)}
+.log-line.ok{color:rgba(0,255,136,0.75)}
+.log-line.err{color:rgba(255,45,85,0.75)}
+.log-line.info{color:rgba(255,230,0,0.65)}
+.log-line.warn{color:rgba(255,107,43,0.7)}
+
+/* ─── TICKER ─── */
+.ticker{overflow:hidden;border-top:1px solid rgba(0,255,234,0.07);border-bottom:1px solid rgba(0,255,234,0.07);padding:5px 0;margin-bottom:10px;position:relative;z-index:2;background:rgba(0,255,234,0.015)}
+.ticker-inner{display:flex;gap:36px;animation:tick 45s linear infinite;white-space:nowrap;font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,255,234,0.42)}
+@keyframes tick{0%{transform:translateX(0)}100%{transform:translateX(-50%)}}
+.tu{color:var(--cg)}.td{color:var(--cr)}
+
+/* ─── WAVEFORM ─── */
+.wave-c{width:100%;height:40px;display:block}
+
+/* ─── MAIN GRID ─── */
+.mg{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;position:relative;z-index:2}
+.prow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,255,234,0.06);font-family:'Share Tech Mono',monospace;font-size:10px;gap:4px}
+.xpair{color:var(--cp);font-weight:700;font-size:10px}
+.xcat{font-size:8px;color:rgba(191,95,255,0.38)}
+.xprice{color:rgba(191,95,255,0.85);font-size:10px;text-align:right}
+.xup{color:var(--cg);font-size:9px}.xdn{color:var(--cr);font-size:9px}
+.spark{display:flex;align-items:flex-end;gap:2px;height:16px}
+.sb{width:4px;border-radius:1px}
+.su{background:rgba(0,255,136,0.6)}.sd{background:rgba(255,45,85,0.6)}
+.stat3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:4px;margin-top:7px}
+.sbox{padding:5px 6px;border:1px solid;text-align:center}
+.sx{border-color:rgba(191,95,255,0.12);background:rgba(191,95,255,0.03)}
+.sk{border-color:rgba(255,230,0,0.12);background:rgba(255,230,0,0.03)}
+.sf{border-color:rgba(0,170,255,0.12);background:rgba(0,170,255,0.03)}
+.spm{border-color:rgba(255,107,43,0.12);background:rgba(255,107,43,0.03)}
+.slbl{font-size:8px;letter-spacing:1px;color:rgba(0,255,234,0.28);text-transform:uppercase}
+.svx{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--cp);margin-top:1px}
+.svk{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--cy);margin-top:1px}
+.svf{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--cb);margin-top:1px}
+.svpm{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--co);margin-top:1px}
+
+.pmrow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,107,43,0.07);font-size:10px;font-family:'Share Tech Mono',monospace;gap:4px}
+.pmname{color:rgba(255,107,43,0.85);font-size:9px;flex:1;line-height:1.3}
+.pmyes{color:var(--cg);font-size:10px}.pmno{color:var(--cr);font-size:10px}
+.pmvol{color:rgba(255,107,43,0.3);font-size:9px;text-align:right;min-width:34px}
+.krow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(255,230,0,0.07);font-size:10px;font-family:'Share Tech Mono',monospace;gap:4px}
+.kname{color:rgba(255,230,0,0.82);font-size:9px;flex:1;line-height:1.3}
+.kyes{color:var(--cg);font-size:10px}.kno{color:var(--cr);font-size:10px}
+.kvol{color:rgba(255,230,0,0.3);font-size:9px;text-align:right;min-width:34px}
+.frow{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,170,255,0.07);font-family:'Share Tech Mono',monospace;font-size:10px;gap:4px}
+.fpair{color:var(--cb);font-weight:700;font-size:10px}
+.fcat{font-size:8px;color:rgba(0,170,255,0.38)}
+.fprice{color:rgba(0,170,255,0.85);font-size:10px;text-align:right}
+.fup{color:var(--cg);font-size:9px}.fdn{color:var(--cr);font-size:9px}
+
+/* ─── BOTTOM ROW ─── */
+.bg6{display:grid;grid-template-columns:repeat(6,1fr);gap:10px;margin-top:10px;position:relative;z-index:2}
+.news-item{padding:5px 0;border-bottom:1px solid rgba(0,255,234,0.06);display:flex;gap:6px}
+.news-time{font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,255,234,0.28);min-width:34px;padding-top:1px}
+.news-txt{font-size:10px;color:rgba(0,255,234,0.72);line-height:1.3}
+.ntag{font-size:7px;padding:1px 5px;border:1px solid;margin-top:2px;display:inline-block}
+.nt-h{color:var(--cr);border-color:rgba(255,45,85,0.3);background:rgba(255,45,85,0.07)}
+.nt-m{color:var(--cy);border-color:rgba(255,230,0,0.3);background:rgba(255,230,0,0.07)}
+.nt-l{color:var(--cg);border-color:rgba(0,255,136,0.3);background:rgba(0,255,136,0.07)}
+.cal-row{display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid rgba(0,255,234,0.05);gap:3px}
+.cal-time{font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,255,234,0.28);min-width:36px}
+.cal-name{color:rgba(0,255,234,0.72);font-size:9px;flex:1;line-height:1.3}
+.cal-ccy{color:var(--cy);font-size:8px;min-width:22px}
+.imp-h{color:var(--cr);font-size:9px}.imp-m{color:var(--cy);font-size:9px}.imp-l{color:var(--cg);font-size:9px}
+.alert-item{display:flex;gap:7px;align-items:flex-start;padding:5px 0;border-bottom:1px solid rgba(0,255,234,0.05)}
+.pulse-ring{display:inline-block;width:8px;height:8px;border-radius:50%;border:1px solid;animation:ring 2s ease-in-out infinite;margin-top:2px;min-width:8px}
+.pr-r{border-color:var(--cr);background:rgba(255,45,85,0.2)}
+.pr-y{border-color:var(--cy);background:rgba(255,230,0,0.2)}
+.pr-g{border-color:var(--cg);background:rgba(0,255,136,0.2)}
+@keyframes ring{0%,100%{transform:scale(1);opacity:1}50%{transform:scale(1.4);opacity:0.4}}
+.alert-txt{font-size:10px;line-height:1.3}
+.a-h{color:var(--cr)}.a-m{color:var(--cy)}.a-l{color:var(--cg)}
+.alert-sub{font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,255,234,0.28)}
+.tip-item{padding:6px 0;border-bottom:1px solid rgba(0,255,234,0.06)}
+.tip-num{font-family:'Orbitron',sans-serif;font-size:9px;color:rgba(0,255,234,0.3);margin-bottom:2px;letter-spacing:1px}
+.tip-txt{font-size:10px;color:rgba(0,255,234,0.78);line-height:1.4}
+.tip-tag{font-size:7px;padding:1px 5px;border:1px solid rgba(0,255,234,0.2);color:rgba(0,255,234,0.5);display:inline-block;margin-top:2px}
+.fact-card{background:rgba(0,255,234,0.03);border:1px solid rgba(0,255,234,0.1);padding:8px;margin-bottom:6px;position:relative}
+.fact-card::before{content:'';position:absolute;top:0;left:8px;right:8px;height:1px;background:linear-gradient(90deg,transparent,rgba(0,255,234,0.4),transparent)}
+.fact-label{font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:3px;color:rgba(0,255,234,0.35);margin-bottom:4px}
+.fact-txt{font-size:10px;color:rgba(0,255,234,0.78);line-height:1.4}
+.fact-src{font-family:'Share Tech Mono',monospace;font-size:8px;color:rgba(0,255,234,0.28);margin-top:3px}
+.fact-nav{display:flex;gap:4px;justify-content:center;margin-top:6px}
+.fnav-btn{background:rgba(0,255,234,0.04);border:1px solid rgba(0,255,234,0.15);color:rgba(0,255,234,0.4);font-family:'Share Tech Mono',monospace;font-size:9px;padding:3px 10px;cursor:pointer;transition:all 0.2s}
+.fnav-btn:hover{background:rgba(0,255,234,0.1);border-color:var(--c);color:var(--c)}
+.fact-counter{font-family:'Orbitron',sans-serif;font-size:9px;color:rgba(0,255,234,0.3);text-align:center;margin-top:4px}
+</style>
+</head>
+<body>
+<div class="hud">
+<canvas id="sc"></canvas>
+<div class="grid-bg"></div>
+<div class="vignette"></div>
+<div class="scanline"></div>
+
+<!-- HEADER -->
+<div class="hdr">
+  <div>
+    <div class="logo">JASON <span class="mid">T</span> MOORE</div>
+    <div class="logo-s">MULTI-PLATFORM TRADING COMMAND CENTER</div>
+  </div>
+  <div class="pills">
+    <div class="pill pp2"><div class="dot off" id="dot-plexy"></div><span id="lbl-plexy">PLEXYTRADE</span></div>
+    <div class="pill ppm"><div class="dot off" id="dot-poly"></div><span id="lbl-poly">POLYMARKET</span></div>
+    <div class="pill pk"><div class="dot off" id="dot-kalshi"></div><span id="lbl-kalshi">KALSHI</span></div>
+    <div class="pill pf"><div class="dot off" id="dot-forex"></div><span id="lbl-forex">FOREX.COM</span></div>
+  </div>
+  <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+    <div class="clk-big" id="clk">00:00:00</div>
+    <div class="clk-s" id="dt">--- · --- · ----</div>
+    <button class="settings-btn" id="settings-toggle" onclick="toggleSettings()">
+      <span class="gear">&#9881;</span> API SETTINGS
+    </button>
+  </div>
+</div>
+
+<!-- SETTINGS PANEL -->
+<div class="settings-overlay" id="settings-overlay">
+  <div class="settings-panel">
+    <div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="sp-title">API KEY CONFIGURATION</div>
+    <div class="sp-sub">KEYS ARE STORED IN SESSION MEMORY ONLY &nbsp;·&nbsp; NEVER TRANSMITTED &nbsp;·&nbsp; AUTO-CLEARED ON TAB CLOSE</div>
+    <div class="sp-warning">
+      <div class="sp-warning-icon">&#9888;</div>
+      <div class="sp-warning-txt">
+        <strong>Security reminder:</strong> Use <strong>read-only</strong> API keys where available. Never use keys with withdrawal or execution permissions in any web interface. Your keys are held in RAM for this session only — they are never sent to any server and are permanently erased when you close or refresh this tab. This file runs entirely locally in your browser.
+      </div>
+    </div>
+    <div class="sp-grid">
+
+      <!-- PLEXYTRADE -->
+      <div class="api-block">
+        <div class="api-header">
+          <div class="api-name" style="color:var(--cp)">&#9632; PLEXYTRADE</div>
+          <div class="api-status disconnected" id="st-plexy">DISCONNECTED</div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">API Key</div>
+          <input class="api-input" id="plexy-key" type="password" placeholder="Paste PlexyTrade API key..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('plexy-key',this)"><span>SHOW</span></label>
+        </div>
+        <div class="field-group">
+          <div class="field-label">API Secret</div>
+          <input class="api-input" id="plexy-secret" type="password" placeholder="Paste PlexyTrade secret..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('plexy-secret',this)"><span>SHOW</span></label>
+        </div>
+        <div class="hint">Get keys at: PlexyTrade Dashboard → Settings → API</div>
+        <button class="connect-btn plexy" onclick="connectPlatform('plexy')">&#9654; CONNECT PLEXYTRADE</button>
+        <button class="disconnect-btn" onclick="disconnectPlatform('plexy')">&#10005; DISCONNECT</button>
+      </div>
+
+      <!-- POLYMARKET -->
+      <div class="api-block">
+        <div class="api-header">
+          <div class="api-name" style="color:var(--co)">&#9632; POLYMARKET</div>
+          <div class="api-status disconnected" id="st-poly">DISCONNECTED</div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">CLOB API Key</div>
+          <input class="api-input" id="poly-key" type="password" placeholder="Paste Polymarket CLOB key..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('poly-key',this)"><span>SHOW</span></label>
+        </div>
+        <div class="field-group">
+          <div class="field-label">API Secret / Private Key</div>
+          <input class="api-input" id="poly-secret" type="password" placeholder="Paste Polymarket secret..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('poly-secret',this)"><span>SHOW</span></label>
+        </div>
+        <div class="hint">Get keys at: polymarket.com → Profile → API Keys → Create CLOB Key</div>
+        <button class="connect-btn poly" onclick="connectPlatform('poly')">&#9654; CONNECT POLYMARKET</button>
+        <button class="disconnect-btn" onclick="disconnectPlatform('poly')">&#10005; DISCONNECT</button>
+      </div>
+
+      <!-- KALSHI -->
+      <div class="api-block">
+        <div class="api-header">
+          <div class="api-name" style="color:var(--cy)">&#9632; KALSHI</div>
+          <div class="api-status disconnected" id="st-kalshi">DISCONNECTED</div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">API Key ID</div>
+          <input class="api-input" id="kalshi-key" type="password" placeholder="Paste Kalshi API key ID..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('kalshi-key',this)"><span>SHOW</span></label>
+        </div>
+        <div class="field-group">
+          <div class="field-label">API Key Secret</div>
+          <input class="api-input" id="kalshi-secret" type="password" placeholder="Paste Kalshi key secret..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('kalshi-secret',this)"><span>SHOW</span></label>
+        </div>
+        <div class="hint">Get keys at: kalshi.com → Settings → API → Create Key (read-only recommended)</div>
+        <button class="connect-btn kalshi" onclick="connectPlatform('kalshi')">&#9654; CONNECT KALSHI</button>
+        <button class="disconnect-btn" onclick="disconnectPlatform('kalshi')">&#10005; DISCONNECT</button>
+      </div>
+
+      <!-- FOREX.COM -->
+      <div class="api-block">
+        <div class="api-header">
+          <div class="api-name" style="color:var(--cb)">&#9632; FOREX.COM</div>
+          <div class="api-status disconnected" id="st-forex">DISCONNECTED</div>
+        </div>
+        <div class="field-group">
+          <div class="field-label">API Key</div>
+          <input class="api-input" id="forex-key" type="password" placeholder="Paste Forex.com API key..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('forex-key',this)"><span>SHOW</span></label>
+        </div>
+        <div class="field-group">
+          <div class="field-label">Account ID</div>
+          <input class="api-input" id="forex-account" type="password" placeholder="Paste your Account ID..." oninput="onInput(this)">
+          <label class="show-toggle"><input type="checkbox" onchange="toggleShow('forex-account',this)"><span>SHOW</span></label>
+        </div>
+        <div class="hint">Get keys at: forex.com → My Account → API Management → Generate Key</div>
+        <button class="connect-btn forex" onclick="connectPlatform('forex')">&#9654; CONNECT FOREX.COM</button>
+        <button class="disconnect-btn" onclick="disconnectPlatform('forex')">&#10005; DISCONNECT</button>
+      </div>
+
+    </div>
+
+    <!-- CONNECTION LOG -->
+    <div class="log-box" id="conn-log">
+      <div class="log-line info">[ SYS ] Jason T Moore Trading HUD — API panel initialized</div>
+      <div class="log-line">[ SYS ] All keys stored in session memory only — never persisted to disk or network</div>
+    </div>
+
+    <div class="sp-footer">
+      <div class="sp-note">&#128274; SESSION-ONLY STORAGE &nbsp;·&nbsp; NO SERVER CONTACT &nbsp;·&nbsp; CLEARS ON CLOSE</div>
+      <div style="display:flex;gap:8px">
+        <button class="clear-btn" onclick="clearAllKeys()">&#10006; CLEAR ALL KEYS</button>
+        <button class="refresh-btn" onclick="refreshAll()">&#8635; REFRESH ALL DATA</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TICKER -->
+<div class="ticker">
+  <div class="ticker-inner" id="ticker-data">
+    <span>EURUSD <span class="tu">1.0842 ▲+0.12%</span></span>
+    <span>GBPUSD <span class="td">1.2614 ▼-0.08%</span></span>
+    <span>XAUUSD <span class="tu">2,312.40 ▲+0.34%</span></span>
+    <span>BTCUSD <span class="tu">68,420 ▲+1.24%</span></span>
+    <span>ETHUSD <span class="td">3,482 ▼-0.31%</span></span>
+    <span>USDJPY <span class="td">151.82 ▼-0.05%</span></span>
+    <span>SPX500 <span class="tu">5,218 ▲+0.18%</span></span>
+    <span>CRUDE <span class="td">82.14 ▼-0.44%</span></span>
+    <span>US30 <span class="tu">38,847 ▲+0.21%</span></span>
+    <span>NZDUSD <span class="tu">0.5981 ▲+0.09%</span></span>
+    <span>EURUSD <span class="tu">1.0842 ▲+0.12%</span></span>
+    <span>GBPUSD <span class="td">1.2614 ▼-0.08%</span></span>
+    <span>XAUUSD <span class="tu">2,312.40 ▲+0.34%</span></span>
+    <span>BTCUSD <span class="tu">68,420 ▲+1.24%</span></span>
+    <span>ETHUSD <span class="td">3,482 ▼-0.31%</span></span>
+    <span>USDJPY <span class="td">151.82 ▼-0.05%</span></span>
+    <span>SPX500 <span class="tu">5,218 ▲+0.18%</span></span>
+    <span>CRUDE <span class="td">82.14 ▼-0.44%</span></span>
+    <span>US30 <span class="tu">38,847 ▲+0.21%</span></span>
+    <span>NZDUSD <span class="tu">0.5981 ▲+0.09%</span></span>
+  </div>
+</div>
+
+<!-- WAVEFORM -->
+<div class="p" style="margin-bottom:10px;padding:6px 12px">
+  <div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div style="font-family:'Orbitron',sans-serif;font-size:7px;letter-spacing:2px;color:rgba(0,255,234,0.28);min-width:60px">MARKET EKG</div>
+    <canvas class="wave-c" id="wc"></canvas>
+    <div style="font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,255,136,0.6);min-width:60px;text-align:right">● LIVE</div>
+  </div>
+</div>
+
+<!-- MAIN 4-PLATFORM GRID -->
+<div class="mg">
+
+  <!-- PLEXYTRADE -->
+  <div class="p">
+    <div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl"><span class="ptag tag-p">PLEXYTRADE</span></div>
+    <div class="prow" style="border-color:rgba(191,95,255,0.08)"><div><div class="xpair">BTC/USD</div><div class="xcat">Crypto</div></div><div style="text-align:right"><div class="xprice" id="px-btc">$68,420</div><div class="xup" id="px-btc-chg">+1.24%</div></div><div class="spark"><div class="sb su" style="height:7px"></div><div class="sb su" style="height:10px"></div><div class="sb su" style="height:14px"></div><div class="sb su" style="height:12px"></div><div class="sb su" style="height:16px"></div></div></div>
+    <div class="prow" style="border-color:rgba(191,95,255,0.08)"><div><div class="xpair">ETH/USD</div><div class="xcat">Crypto</div></div><div style="text-align:right"><div class="xprice" id="px-eth">$3,482</div><div class="xdn" id="px-eth-chg">-0.31%</div></div><div class="spark"><div class="sb su" style="height:13px"></div><div class="sb sd" style="height:9px"></div><div class="sb sd" style="height:7px"></div><div class="sb su" style="height:9px"></div><div class="sb sd" style="height:7px"></div></div></div>
+    <div class="prow" style="border-color:rgba(191,95,255,0.08)"><div><div class="xpair">XAU/USD</div><div class="xcat">Metals</div></div><div style="text-align:right"><div class="xprice" id="px-xau">$2,312</div><div class="xup" id="px-xau-chg">+0.34%</div></div><div class="spark"><div class="sb su" style="height:8px"></div><div class="sb su" style="height:13px"></div><div class="sb su" style="height:10px"></div><div class="sb su" style="height:15px"></div><div class="sb su" style="height:16px"></div></div></div>
+    <div class="prow" style="border-color:rgba(191,95,255,0.08)"><div><div class="xpair">SOL/USD</div><div class="xcat">Crypto</div></div><div style="text-align:right"><div class="xprice" id="px-sol">$182.40</div><div class="xup" id="px-sol-chg">+2.11%</div></div><div class="spark"><div class="sb su" style="height:9px"></div><div class="sb su" style="height:13px"></div><div class="sb su" style="height:15px"></div><div class="sb su" style="height:14px"></div><div class="sb su" style="height:16px"></div></div></div>
+    <div class="prow" style="border-color:rgba(191,95,255,0.08);border-bottom:none"><div><div class="xpair">US30</div><div class="xcat">Index</div></div><div style="text-align:right"><div class="xprice" id="px-us30">38,847</div><div class="xdn" id="px-us30-chg">-0.06%</div></div><div class="spark"><div class="sb su" style="height:11px"></div><div class="sb sd" style="height:8px"></div><div class="sb su" style="height:10px"></div><div class="sb sd" style="height:8px"></div><div class="sb sd" style="height:6px"></div></div></div>
+    <div class="spltr" style="background:linear-gradient(90deg,transparent,rgba(191,95,255,0.22),transparent)"></div>
+    <div class="stat3">
+      <div class="sbox sx"><div class="slbl">Balance</div><div class="svx" id="px-bal">-- --</div></div>
+      <div class="sbox sx"><div class="slbl">Open</div><div class="svx" id="px-open">--</div></div>
+      <div class="sbox sx"><div class="slbl">P&amp;L</div><div class="svx" id="px-pl">-- --</div></div>
+    </div>
+  </div>
+
+  <!-- POLYMARKET -->
+  <div class="p">
+    <div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl"><span class="ptag tag-pm">POLYMARKET</span></div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;font-size:8px;color:rgba(255,107,43,0.3);padding:2px 0;border-bottom:1px solid rgba(255,107,43,0.08);margin-bottom:2px;font-family:'Share Tech Mono',monospace;gap:4px;letter-spacing:1px"><span>EVENT</span><span>YES/NO</span><span>VOL</span></div>
+    <div class="pmrow"><div class="pmname" id="pm-e1">Fed cuts rates June</div><div style="text-align:center"><div class="pmyes" id="pm-y1">38¢</div><div class="pmno" id="pm-n1">62¢</div></div><div class="pmvol" id="pm-v1">$84M</div></div>
+    <div class="pmrow"><div class="pmname" id="pm-e2">BTC hits $80K by May</div><div style="text-align:center"><div class="pmyes" id="pm-y2">42¢</div><div class="pmno" id="pm-n2">58¢</div></div><div class="pmvol" id="pm-v2">$61M</div></div>
+    <div class="pmrow"><div class="pmname" id="pm-e3">US recession 2025</div><div style="text-align:center"><div class="pmyes" id="pm-y3">28¢</div><div class="pmno" id="pm-n3">72¢</div></div><div class="pmvol" id="pm-v3">$47M</div></div>
+    <div class="pmrow"><div class="pmname" id="pm-e4">SPX above 5500 EOY</div><div style="text-align:center"><div class="pmyes" id="pm-y4">61¢</div><div class="pmno" id="pm-n4">39¢</div></div><div class="pmvol" id="pm-v4">$38M</div></div>
+    <div class="pmrow" style="border-bottom:none"><div class="pmname" id="pm-e5">Gold above $2400 May</div><div style="text-align:center"><div class="pmyes" id="pm-y5">57¢</div><div class="pmno" id="pm-n5">43¢</div></div><div class="pmvol" id="pm-v5">$22M</div></div>
+    <div class="spltr" style="background:linear-gradient(90deg,transparent,rgba(255,107,43,0.22),transparent)"></div>
+    <div class="stat3">
+      <div class="sbox spm"><div class="slbl">Portfolio</div><div class="svpm" id="pm-bal">-- --</div></div>
+      <div class="sbox spm"><div class="slbl">Open</div><div class="svpm" id="pm-open">--</div></div>
+      <div class="sbox spm"><div class="slbl">P&amp;L</div><div class="svpm" id="pm-pl">-- --</div></div>
+    </div>
+  </div>
+
+  <!-- KALSHI -->
+  <div class="p">
+    <div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl"><span class="ptag tag-k">KALSHI</span></div>
+    <div style="display:grid;grid-template-columns:1fr auto auto;font-size:8px;color:rgba(255,230,0,0.28);padding:2px 0;border-bottom:1px solid rgba(255,230,0,0.08);margin-bottom:2px;font-family:'Share Tech Mono',monospace;gap:4px;letter-spacing:1px"><span>CONTRACT</span><span>YES/NO</span><span>VOL</span></div>
+    <div class="krow"><div class="kname" id="k-e1">Fed Rate Cut June</div><div style="text-align:center"><div class="kyes" id="k-y1">62¢</div><div class="kno" id="k-n1">38¢</div></div><div class="kvol" id="k-v1">$42K</div></div>
+    <div class="krow"><div class="kname" id="k-e2">CPI Under 3% May</div><div style="text-align:center"><div class="kyes" id="k-y2">71¢</div><div class="kno" id="k-n2">29¢</div></div><div class="kvol" id="k-v2">$87K</div></div>
+    <div class="krow"><div class="kname" id="k-e3">BTC &gt;$70K EOD</div><div style="text-align:center"><div class="kyes" id="k-y3">48¢</div><div class="kno" id="k-n3">52¢</div></div><div class="kvol" id="k-v3">$128K</div></div>
+    <div class="krow"><div class="kname" id="k-e4">SPX 5200+ Week</div><div style="text-align:center"><div class="kyes" id="k-y4">55¢</div><div class="kno" id="k-n4">45¢</div></div><div class="kvol" id="k-v4">$61K</div></div>
+    <div class="krow" style="border-bottom:none"><div class="kname" id="k-e5">US30 &gt;39K Friday</div><div style="text-align:center"><div class="kyes" id="k-y5">44¢</div><div class="kno" id="k-n5">56¢</div></div><div class="kvol" id="k-v5">$33K</div></div>
+    <div class="spltr" style="background:linear-gradient(90deg,transparent,rgba(255,230,0,0.22),transparent)"></div>
+    <div class="stat3">
+      <div class="sbox sk"><div class="slbl">Portfolio</div><div class="svk" id="k-bal">-- --</div></div>
+      <div class="sbox sk"><div class="slbl">Open</div><div class="svk" id="k-open">--</div></div>
+      <div class="sbox sk"><div class="slbl">P&amp;L</div><div class="svk" id="k-pl">-- --</div></div>
+    </div>
+  </div>
+
+  <!-- FOREX.COM -->
+  <div class="p">
+    <div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl"><span class="ptag tag-f">FOREX.COM</span></div>
+    <div class="frow"><div><div class="fpair">EUR/USD</div><div class="fcat">Major</div></div><div style="text-align:right"><div class="fprice" id="fx-eurusd">1.08420</div><div class="fup" id="fx-eurusd-chg">+0.12%</div></div><div class="spark"><div class="sb su" style="height:9px"></div><div class="sb su" style="height:12px"></div><div class="sb sd" style="height:8px"></div><div class="sb su" style="height:14px"></div><div class="sb su" style="height:16px"></div></div></div>
+    <div class="frow"><div><div class="fpair">GBP/USD</div><div class="fcat">Major</div></div><div style="text-align:right"><div class="fprice" id="fx-gbpusd">1.26140</div><div class="fdn" id="fx-gbpusd-chg">-0.08%</div></div><div class="spark"><div class="sb su" style="height:13px"></div><div class="sb sd" style="height:10px"></div><div class="sb sd" style="height:7px"></div><div class="sb su" style="height:9px"></div><div class="sb sd" style="height:7px"></div></div></div>
+    <div class="frow"><div><div class="fpair">USD/JPY</div><div class="fcat">Major</div></div><div style="text-align:right"><div class="fprice" id="fx-usdjpy">151.820</div><div class="fdn" id="fx-usdjpy-chg">-0.05%</div></div><div class="spark"><div class="sb sd" style="height:10px"></div><div class="sb sd" style="height:8px"></div><div class="sb su" style="height:11px"></div><div class="sb sd" style="height:9px"></div><div class="sb sd" style="height:6px"></div></div></div>
+    <div class="frow"><div><div class="fpair">AUD/USD</div><div class="fcat">Minor</div></div><div style="text-align:right"><div class="fprice" id="fx-audusd">0.65280</div><div class="fup" id="fx-audusd-chg">+0.07%</div></div><div class="spark"><div class="sb su" style="height:8px"></div><div class="sb su" style="height:11px"></div><div class="sb su" style="height:13px"></div><div class="sb su" style="height:12px"></div><div class="sb su" style="height:14px"></div></div></div>
+    <div class="frow" style="border-bottom:none"><div><div class="fpair">USD/CAD</div><div class="fcat">Minor</div></div><div style="text-align:right"><div class="fprice" id="fx-usdcad">1.35910</div><div class="fdn" id="fx-usdcad-chg">-0.03%</div></div><div class="spark"><div class="sb su" style="height:10px"></div><div class="sb sd" style="height:8px"></div><div class="sb su" style="height:9px"></div><div class="sb sd" style="height:8px"></div><div class="sb sd" style="height:7px"></div></div></div>
+    <div class="spltr" style="background:linear-gradient(90deg,transparent,rgba(0,170,255,0.22),transparent)"></div>
+    <div class="stat3">
+      <div class="sbox sf"><div class="slbl">Balance</div><div class="svf" id="fx-bal">-- --</div></div>
+      <div class="sbox sf"><div class="slbl">Open</div><div class="svf" id="fx-open">--</div></div>
+      <div class="sbox sf"><div class="slbl">P&amp;L</div><div class="svf" id="fx-pl">-- --</div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- BOTTOM ROW -->
+<div class="bg6">
+  <div class="p"><div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl">Market News</div>
+    <div class="news-item"><div class="news-time">08:42</div><div><div class="news-txt">Fed signals cautious rate cut approach in minutes</div><span class="ntag nt-h">HIGH</span></div></div>
+    <div class="news-item"><div class="news-time">09:14</div><div><div class="news-txt">US NFP smashes forecast at +303K jobs</div><span class="ntag nt-h">HIGH</span></div></div>
+    <div class="news-item"><div class="news-time">10:02</div><div><div class="news-txt">ECB holds rates; Lagarde stays hawkish</div><span class="ntag nt-m">MED</span></div></div>
+    <div class="news-item" style="border-bottom:none"><div class="news-time">11:30</div><div><div class="news-txt">BTC ETF records $280M daily inflow</div><span class="ntag nt-l">LOW</span></div></div>
+  </div>
+  <div class="p"><div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl">Econ Calendar</div>
+    <div class="cal-row"><div class="cal-time">13:30</div><div class="cal-name">US Core CPI m/m</div><div class="cal-ccy">USD</div><div class="imp-h">●●●</div></div>
+    <div class="cal-row"><div class="cal-time">14:00</div><div class="cal-name">Fed Chair Speech</div><div class="cal-ccy">USD</div><div class="imp-h">●●●</div></div>
+    <div class="cal-row"><div class="cal-time">15:30</div><div class="cal-name">UK GDP Prelim q/q</div><div class="cal-ccy">GBP</div><div class="imp-m">●●○</div></div>
+    <div class="cal-row"><div class="cal-time">16:00</div><div class="cal-name">Eurozone PMI</div><div class="cal-ccy">EUR</div><div class="imp-m">●●○</div></div>
+    <div class="cal-row" style="border-bottom:none"><div class="cal-time">17:00</div><div class="cal-name">EIA Crude Stocks</div><div class="cal-ccy">USD</div><div class="imp-l">●○○</div></div>
+  </div>
+  <div class="p"><div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl">Signal Alerts</div>
+    <div class="alert-item"><div class="pulse-ring pr-r"></div><div><div class="alert-txt a-h">EURUSD nearing key resistance 1.0880</div><div class="alert-sub">09:31 · HIGH PRIORITY</div></div></div>
+    <div class="alert-item"><div class="pulse-ring pr-y"></div><div><div class="alert-txt a-m">XAUUSD RSI overbought — reversal risk</div><div class="alert-sub">09:12 · MEDIUM</div></div></div>
+    <div class="alert-item"><div class="pulse-ring pr-r"></div><div><div class="alert-txt a-h">Polymarket: Fed cut odds dropped 8pts</div><div class="alert-sub">08:55 · HIGH PRIORITY</div></div></div>
+    <div class="alert-item"><div class="pulse-ring pr-g"></div><div><div class="alert-txt a-l">BTC breakout above $68K confirmed</div><div class="alert-sub">08:44 · LOW</div></div></div>
+    <div class="alert-item" style="border-bottom:none"><div class="pulse-ring pr-y"></div><div><div class="alert-txt a-m">SOL momentum building — watch $190</div><div class="alert-sub">08:20 · MEDIUM</div></div></div>
+  </div>
+  <div class="p"><div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl">All Platforms P&amp;L</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:9px;color:rgba(191,95,255,0.5);min-width:52px;letter-spacing:1px">PLEXY</span><div style="flex:1;height:4px;background:rgba(191,95,255,0.1);border-radius:2px;overflow:hidden"><div id="bar-px" style="height:100%;width:0%;background:var(--cp);transition:width 1s ease"></div></div><span class="svx" style="font-family:'Orbitron',sans-serif;font-size:10px;min-width:42px;text-align:right" id="comb-px">-- --</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:9px;color:rgba(255,107,43,0.5);min-width:52px;letter-spacing:1px">POLY</span><div style="flex:1;height:4px;background:rgba(255,107,43,0.1);border-radius:2px;overflow:hidden"><div id="bar-pm" style="height:100%;width:0%;background:var(--co);transition:width 1s ease"></div></div><span class="svpm" style="font-family:'Orbitron',sans-serif;font-size:10px;min-width:42px;text-align:right" id="comb-pm">-- --</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:9px;color:rgba(255,230,0,0.5);min-width:52px;letter-spacing:1px">KALSHI</span><div style="flex:1;height:4px;background:rgba(255,230,0,0.1);border-radius:2px;overflow:hidden"><div id="bar-k" style="height:100%;width:0%;background:var(--cy);transition:width 1s ease"></div></div><span class="svk" style="font-family:'Orbitron',sans-serif;font-size:10px;min-width:42px;text-align:right" id="comb-k">-- --</span></div>
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:6px"><span style="font-size:9px;color:rgba(0,170,255,0.5);min-width:52px;letter-spacing:1px">FOREX</span><div style="flex:1;height:4px;background:rgba(0,170,255,0.1);border-radius:2px;overflow:hidden"><div id="bar-fx" style="height:100%;width:0%;background:var(--cb);transition:width 1s ease"></div></div><span class="svf" style="font-family:'Orbitron',sans-serif;font-size:10px;min-width:42px;text-align:right" id="comb-fx">-- --</span></div>
+    </div>
+    <div class="spltr"></div>
+    <div style="text-align:center">
+      <div style="font-size:8px;color:rgba(0,255,234,0.32);letter-spacing:2px;margin-bottom:3px">COMBINED NET P&amp;L</div>
+      <div style="font-family:'Orbitron',sans-serif;font-size:20px;color:rgba(0,255,234,0.28)" id="comb-total">CONNECT APIs</div>
+    </div>
+  </div>
+  <div class="p"><div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl">Investment Tips</div>
+    <div class="tip-item"><div class="tip-num">TIP 01</div><div class="tip-txt">Never risk more than 1–2% of your account on a single trade. Consistency beats home runs.</div><span class="tip-tag">RISK MGMT</span></div>
+    <div class="tip-item"><div class="tip-num">TIP 02</div><div class="tip-txt">Prediction markets like Kalshi & Polymarket can signal macro moves before traditional media catches on.</div><span class="tip-tag">ALPHA</span></div>
+    <div class="tip-item"><div class="tip-num">TIP 03</div><div class="tip-txt">In high-volatility sessions, widen your stop-loss to avoid getting shaken out prematurely.</div><span class="tip-tag">EXECUTION</span></div>
+    <div class="tip-item" style="border-bottom:none"><div class="tip-num">TIP 04</div><div class="tip-txt">Diversifying across platforms reduces single-broker risk and opens cross-market arbitrage.</div><span class="tip-tag">STRATEGY</span></div>
+  </div>
+  <div class="p"><div class="cx tl"></div><div class="cx tr"></div><div class="cx bl"></div><div class="cx br"></div>
+    <div class="plbl">Economy Fun Facts</div>
+    <div class="fact-card"><div class="fact-label" id="fact-cat">MONETARY POLICY</div><div class="fact-txt" id="fact-txt">The Federal Reserve was created in 1913 after the Panic of 1907. It now controls the world's most influential interest rate, affecting billions of people globally.</div><div class="fact-src" id="fact-src">SOURCE: Federal Reserve History</div></div>
+    <div class="fact-nav"><button class="fnav-btn" onclick="prevFact()">&#8592; PREV</button><button class="fnav-btn" onclick="nextFact()">NEXT &#8594;</button></div>
+    <div class="fact-counter" id="fact-counter">1 / 8</div>
+  </div>
+</div>
+
+</div><!-- end .hud -->
+
+<script>
+// ════════════════════════════════════════════════════════════════
+//  JASON T MOORE TRADING HUD — API INTEGRATION LAYER
+//  Version: 6.0 | Local file — runs entirely in your browser
+//  Keys stored in session memory only — never sent to any server
+// ════════════════════════════════════════════════════════════════
+
+const SESSION = {
+  plexy:  { key: '', secret: '', connected: false },
+  poly:   { key: '', secret: '', connected: false },
+  kalshi: { key: '', secret: '', connected: false },
+  forex:  { key: '', secret: '', connected: false }
+};
+
+// ── REFRESH INTERVAL (milliseconds) ──────────────────────────────
+const REFRESH_MS = 30000; // 30 seconds — adjust as needed
+
+// ── API BASE URLS ─────────────────────────────────────────────────
+// NOTE: Most broker APIs require a backend proxy to avoid CORS.
+// These are the real API base URLs. For full live data you will
+// need to run a lightweight local proxy (see README comment below).
+const API_URLS = {
+  plexy:   'https://api.plexytrade.com/v1',      // PlexyTrade REST API
+  poly:    'https://clob.polymarket.com',         // Polymarket CLOB API
+  kalshi:  'https://trading-api.kalshi.com/trade-api/v2', // Kalshi API v2
+  forex:   'https://api-fxtrade.oanda.com/v3'    // Forex.com uses OANDA v3
+};
+
+// ════════════════════════════════════════════════════════════════
+//  SETTINGS PANEL CONTROLS
+// ════════════════════════════════════════════════════════════════
+
+function toggleSettings() {
+  const ov = document.getElementById('settings-overlay');
+  const btn = document.getElementById('settings-toggle');
+  const open = ov.classList.toggle('open');
+  btn.classList.toggle('active', open);
+  btn.innerHTML = open
+    ? '<span class="gear">&#9881;</span> CLOSE SETTINGS'
+    : '<span class="gear">&#9881;</span> API SETTINGS';
+}
+
+function toggleShow(id, cb) {
+  document.getElementById(id).type = cb.checked ? 'text' : 'password';
+}
+
+function onInput(el) {
+  el.classList.toggle('has-value', el.value.length > 0);
+}
+
+function addLog(msg, type = '') {
+  const log = document.getElementById('conn-log');
+  const line = document.createElement('div');
+  line.className = 'log-line ' + type;
+  const n = new Date();
+  const ts = [n.getUTCHours(), n.getUTCMinutes(), n.getUTCSeconds()]
+    .map(x => String(x).padStart(2, '0')).join(':');
+  line.textContent = '[ ' + ts + ' UTC ] ' + msg;
+  log.appendChild(line);
+  log.scrollTop = log.scrollHeight;
+}
+
+function setStatus(platform, status) {
+  const el = document.getElementById('st-' + platform);
+  const dot = document.getElementById('dot-' + platform);
+  el.className = 'api-status ' + status;
+  const labels = { disconnected:'DISCONNECTED', testing:'TESTING...', connected:'CONNECTED', error:'ERROR' };
+  el.textContent = labels[status] || status.toUpperCase();
+  dot.className = 'dot ' + (status === 'connected' ? 'on' : status === 'testing' ? 'pulsing' : 'off');
+}
+
+// ════════════════════════════════════════════════════════════════
+//  CONNECTION HANDLERS
+// ════════════════════════════════════════════════════════════════
+
+async function connectPlatform(platform) {
+  const key = document.getElementById(platform + '-key').value.trim();
+  const secretId = platform === 'forex' ? platform + '-account' : platform + '-secret';
+  const secret = document.getElementById(secretId).value.trim();
+
+  if (!key) {
+    addLog('ERROR: No API key provided for ' + platform.toUpperCase(), 'err');
+    return;
+  }
+
+  SESSION[platform].key = key;
+  SESSION[platform].secret = secret;
+  setStatus(platform, 'testing');
+  addLog('Connecting to ' + platform.toUpperCase() + ' API...', 'info');
+
+  try {
+    let success = false;
+
+    // ── KALSHI (supports browser CORS) ───────────────────────────
+    if (platform === 'kalshi') {
+      success = await connectKalshi(key, secret);
+    }
+    // ── POLYMARKET (public endpoints accessible) ─────────────────
+    else if (platform === 'poly') {
+      success = await connectPolymarket(key, secret);
+    }
+    // ── PLEXYTRADE ────────────────────────────────────────────────
+    else if (platform === 'plexy') {
+      success = await connectPlexy(key, secret);
+    }
+    // ── FOREX.COM / OANDA ─────────────────────────────────────────
+    else if (platform === 'forex') {
+      success = await connectForex(key, secret);
+    }
+
+    if (success) {
+      SESSION[platform].connected = true;
+      setStatus(platform, 'connected');
+      addLog('SUCCESS: ' + platform.toUpperCase() + ' connected and verified', 'ok');
+      await fetchPlatformData(platform);
+      updateCombined();
+    } else {
+      setStatus(platform, 'error');
+      addLog('FAILED: Could not verify ' + platform.toUpperCase() + ' credentials — check key and try again', 'err');
+    }
+  } catch (err) {
+    setStatus(platform, 'error');
+    addLog('ERROR: ' + platform.toUpperCase() + ' — ' + (err.message || 'Network error. If CORS is blocking, run the local proxy. See console for details.'), 'err');
+    console.error('[' + platform + '] API error:', err);
+  }
+}
+
+// ── KALSHI API ────────────────────────────────────────────────────
+async function connectKalshi(keyId, keySecret) {
+  // Kalshi uses API Key auth via header
+  const res = await fetch(API_URLS.kalshi + '/portfolio/balance', {
+    headers: {
+      'Authorization': 'Token ' + keyId,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data && data.balance !== undefined) {
+    const bal = '$' + (data.balance / 100).toFixed(2);
+    document.getElementById('k-bal').textContent = bal;
+    document.getElementById('comb-k').textContent = bal;
+    document.getElementById('bar-k').style.width = '50%';
+    addLog('Kalshi balance loaded: ' + bal, 'ok');
+    return true;
+  }
+  return false;
+}
+
+async function fetchKalshiMarkets() {
+  if (!SESSION.kalshi.connected) return;
+  const res = await fetch(API_URLS.kalshi + '/markets?limit=5&status=open', {
+    headers: { 'Authorization': 'Token ' + SESSION.kalshi.key }
+  });
+  if (!res.ok) return;
+  const data = await res.json();
+  if (data.markets && data.markets.length) {
+    data.markets.slice(0, 5).forEach((m, i) => {
+      const idx = i + 1;
+      const e = document.getElementById('k-e' + idx);
+      const y = document.getElementById('k-y' + idx);
+      const n = document.getElementById('k-n' + idx);
+      const v = document.getElementById('k-v' + idx);
+      if (e) e.textContent = m.title ? m.title.substring(0, 28) : 'Market ' + idx;
+      if (y && m.yes_ask) y.textContent = Math.round(m.yes_ask * 100) + '¢';
+      if (n && m.no_ask) n.textContent = Math.round(m.no_ask * 100) + '¢';
+      if (v && m.volume) v.textContent = formatVol(m.volume);
+    });
+    addLog('Kalshi markets updated (' + data.markets.length + ' loaded)', 'ok');
+  }
+}
+
+// ── POLYMARKET API ────────────────────────────────────────────────
+async function connectPolymarket(key, secret) {
+  // Polymarket CLOB — some endpoints are public
+  const res = await fetch(API_URLS.poly + '/markets?limit=5&active=true&closed=false');
+  if (!res.ok) throw new Error('HTTP ' + res.status);
+  const data = await res.json();
+  if (data && Array.isArray(data.data)) {
+    data.data.slice(0, 5).forEach((m, i) => {
+      const idx = i + 1;
+      const e = document.getElementById('pm-e' + idx);
+      if (e) e.textContent = (m.question || 'Market').substring(0, 28);
+      // Prices from tokens
+      if (m.tokens && m.tokens.length >= 2) {
+        const y = document.getElementById('pm-y' + idx);
+        const nEl = document.getElementById('pm-n' + idx);
+        if (y) y.textContent = Math.round(parseFloat(m.tokens[0].price || 0.5) * 100) + '¢';
+        if (nEl) nEl.textContent = Math.round(parseFloat(m.tokens[1].price || 0.5) * 100) + '¢';
+      }
+      const v = document.getElementById('pm-v' + idx);
+      if (v && m.volume) v.textContent = formatVol(parseFloat(m.volume));
+    });
+    addLog('Polymarket markets loaded — ' + data.data.length + ' active markets found', 'ok');
+    return true;
+  }
+  return false;
+}
+
+// ── PLEXYTRADE API ────────────────────────────────────────────────
+async function connectPlexy(key, secret) {
+  // PlexyTrade API — adjust endpoint to match their actual API docs
+  // This will likely need a CORS proxy for browser use
+  const res = await fetch(API_URLS.plexy + '/account', {
+    headers: {
+      'X-API-KEY': key,
+      'X-API-SECRET': secret,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' — PlexyTrade may require CORS proxy for browser access');
+  const data = await res.json();
+  if (data && data.balance !== undefined) {
+    const bal = '$' + parseFloat(data.balance).toFixed(2);
+    document.getElementById('px-bal').textContent = bal;
+    document.getElementById('comb-px').textContent = bal;
+    document.getElementById('bar-px').style.width = '60%';
+    addLog('PlexyTrade account balance loaded: ' + bal, 'ok');
+    return true;
+  }
+  return false;
+}
+
+// ── FOREX.COM / OANDA API ─────────────────────────────────────────
+async function connectForex(apiKey, accountId) {
+  const res = await fetch(API_URLS.forex + '/accounts/' + accountId + '/summary', {
+    headers: {
+      'Authorization': 'Bearer ' + apiKey,
+      'Content-Type': 'application/json'
+    }
+  });
+  if (!res.ok) throw new Error('HTTP ' + res.status + ' — Forex.com API requires CORS proxy for browser use');
+  const data = await res.json();
+  if (data && data.account) {
+    const acc = data.account;
+    const bal = '$' + parseFloat(acc.balance || 0).toFixed(2);
+    const pl = parseFloat(acc.unrealizedPL || 0).toFixed(2);
+    const openTrades = acc.openTradeCount || '--';
+    document.getElementById('fx-bal').textContent = bal;
+    document.getElementById('fx-open').textContent = openTrades;
+    document.getElementById('fx-pl').textContent = (pl >= 0 ? '+' : '') + '$' + pl;
+    document.getElementById('fx-pl').className = pl >= 0 ? 'svf pos' : 'svf neg';
+    document.getElementById('comb-fx').textContent = (pl >= 0 ? '+' : '') + '$' + pl;
+    document.getElementById('bar-fx').style.width = Math.min(Math.abs(pl) / 500 * 100, 100) + '%';
+    addLog('Forex.com account loaded: Balance ' + bal + ' | Open: ' + openTrades, 'ok');
+    return true;
+  }
+  return false;
+}
+
+// ── FETCH ALL DATA FOR A PLATFORM ────────────────────────────────
+async function fetchPlatformData(platform) {
+  try {
+    if (platform === 'kalshi' && SESSION.kalshi.connected) await fetchKalshiMarkets();
+  } catch(e) {
+    addLog('Data refresh error for ' + platform + ': ' + e.message, 'warn');
+  }
+}
+
+async function refreshAll() {
+  addLog('Manual refresh triggered...', 'info');
+  for (const p of Object.keys(SESSION)) {
+    if (SESSION[p].connected) {
+      addLog('Refreshing ' + p.toUpperCase() + '...', 'info');
+      await fetchPlatformData(p);
+    }
+  }
+  updateCombined();
+  addLog('All connected platforms refreshed', 'ok');
+}
+
+function disconnectPlatform(platform) {
+  SESSION[platform] = { key: '', secret: '', connected: false };
+  setStatus(platform, 'disconnected');
+  document.getElementById(platform + '-key').value = '';
+  document.getElementById(platform + '-key').classList.remove('has-value');
+  const secretId = platform === 'forex' ? platform + '-account' : platform + '-secret';
+  document.getElementById(secretId).value = '';
+  document.getElementById(secretId).classList.remove('has-value');
+  const statMap = {
+    plexy: ['px-bal','px-open','px-pl','comb-px','bar-px'],
+    poly:  ['pm-bal','pm-open','pm-pl','comb-pm','bar-pm'],
+    kalshi:['k-bal','k-open','k-pl','comb-k','bar-k'],
+    forex: ['fx-bal','fx-open','fx-pl','comb-fx','bar-fx']
+  };
+  statMap[platform].forEach((id, i) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    if (id.startsWith('bar-')) { el.style.width = '0%'; }
+    else { el.textContent = '-- --'; el.className = el.className.replace(' pos','').replace(' neg',''); }
+  });
+  updateCombined();
+  addLog(platform.toUpperCase() + ' disconnected and keys cleared', 'warn');
+}
+
+function clearAllKeys() {
+  ['plexy','poly','kalshi','forex'].forEach(p => disconnectPlatform(p));
+  addLog('All API keys cleared from session memory', 'err');
+}
+
+function updateCombined() {
+  const anyConnected = Object.values(SESSION).some(s => s.connected);
+  const tot = document.getElementById('comb-total');
+  if (!anyConnected) {
+    tot.textContent = 'CONNECT APIs';
+    tot.style.color = 'rgba(0,255,234,0.28)';
+    tot.style.textShadow = 'none';
+  } else {
+    tot.style.color = 'var(--cg)';
+    tot.style.textShadow = '0 0 14px rgba(0,255,136,0.4)';
+  }
+}
+
+function formatVol(v) {
+  if (v >= 1e9) return '$' + (v/1e9).toFixed(1) + 'B';
+  if (v >= 1e6) return '$' + (v/1e6).toFixed(0) + 'M';
+  if (v >= 1e3) return '$' + (v/1e3).toFixed(0) + 'K';
+  return '$' + Math.round(v);
+}
+
+// ── AUTO REFRESH ─────────────────────────────────────────────────
+setInterval(refreshAll, REFRESH_MS);
+
+// ════════════════════════════════════════════════════════════════
+//  CLOCK
+// ════════════════════════════════════════════════════════════════
+function tick() {
+  const n = new Date(), p = x => String(x).padStart(2,'0');
+  document.getElementById('clk').textContent = p(n.getUTCHours())+':'+p(n.getUTCMinutes())+':'+p(n.getUTCSeconds());
+  const days = ['SUNDAY','MONDAY','TUESDAY','WEDNESDAY','THURSDAY','FRIDAY','SATURDAY'];
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC'];
+  document.getElementById('dt').textContent = days[n.getUTCDay()]+' · '+months[n.getUTCMonth()]+' '+p(n.getUTCDate())+' · '+n.getUTCFullYear();
+}
+setInterval(tick, 1000); tick();
+
+// ════════════════════════════════════════════════════════════════
+//  STARFIELD
+// ════════════════════════════════════════════════════════════════
+const sc = document.getElementById('sc');
+sc.width = window.innerWidth; sc.height = window.innerHeight;
+window.addEventListener('resize', () => { sc.width = window.innerWidth; sc.height = window.innerHeight; });
+const sx = sc.getContext('2d');
+const stars = Array.from({length:200}, () => ({
+  x: Math.random()*sc.width, y: Math.random()*sc.height,
+  r: Math.random()*1.2+0.2, a: Math.random(), d: Math.random()*0.005+0.001
+}));
+function drawStars() {
+  sx.clearRect(0,0,sc.width,sc.height);
+  stars.forEach(s => {
+    s.a += s.d; if(s.a>1||s.a<0) s.d*=-1;
+    sx.beginPath(); sx.arc(s.x,s.y,s.r,0,Math.PI*2);
+    sx.fillStyle = 'rgba(0,255,234,'+s.a.toFixed(2)+')'; sx.fill();
+  });
+  requestAnimationFrame(drawStars);
+}
+drawStars();
+
+// ════════════════════════════════════════════════════════════════
+//  WAVEFORM EKG
+// ════════════════════════════════════════════════════════════════
+const wc = document.getElementById('wc');
+const wx = wc.getContext('2d');
+let wt = 0; const wpts = [];
+function drawWave() {
+  const W = wc.offsetWidth || 800, H = 40;
+  if (wc.width !== W) { wc.width = W; wc.height = H; }
+  wpts.push(H/2+(Math.sin(wt*0.15)*7+Math.sin(wt*0.06)*5+Math.sin(wt*0.28)*3+(Math.random()-0.5)*3.5));
+  if (wpts.length > W) wpts.shift();
+  wx.clearRect(0,0,W,H);
+  wx.strokeStyle = 'rgba(0,255,136,0.15)'; wx.lineWidth = 5; wx.beginPath();
+  wpts.forEach((p,i) => { i===0 ? wx.moveTo(i,p) : wx.lineTo(i,p); }); wx.stroke();
+  wx.strokeStyle = 'rgba(0,255,136,0.75)'; wx.lineWidth = 1.3; wx.beginPath();
+  wpts.forEach((p,i) => { i===0 ? wx.moveTo(i,p) : wx.lineTo(i,p); }); wx.stroke();
+  wt++; requestAnimationFrame(drawWave);
+}
+drawWave();
+
+// ════════════════════════════════════════════════════════════════
+//  FUN FACTS
+// ════════════════════════════════════════════════════════════════
+const facts = [
+  {cat:'MONETARY POLICY',txt:'The Federal Reserve was created in 1913 after the Panic of 1907. It now controls the world\'s most influential interest rate, affecting billions of people globally.',src:'Federal Reserve History'},
+  {cat:'CRYPTO MARKETS',txt:'Bitcoin\'s total market cap surpassed $1 trillion for the first time in 2021 — larger than the GDP of most countries including Switzerland and Saudi Arabia.',src:'CoinMarketCap / IMF Data'},
+  {cat:'FOREX MARKET',txt:'The foreign exchange market trades over $7.5 trillion per day — the largest financial market on Earth, dwarfing the stock market by over 25x.',src:'Bank for International Settlements'},
+  {cat:'PREDICTION MARKETS',txt:'Studies show prediction markets like Polymarket are often more accurate than polls or expert forecasts. Polymarket called the 2024 US election hours before mainstream media.',src:'Journal of Economic Perspectives'},
+  {cat:'INTEREST RATES',txt:'The Fed raised rates 11 times between 2022–2023, the fastest hiking cycle in 40 years. Mortgage rates hit 8% — the highest since 2000.',src:'Federal Reserve / Freddie Mac'},
+  {cat:'GOLD & INFLATION',txt:'Gold has been used as money for 5,000 years. Since Nixon ended the gold standard in 1971, the US dollar has lost over 85% of its purchasing power.',src:'World Gold Council'},
+  {cat:'STOCK MARKETS',txt:'The S&P 500 has returned ~10% per year historically. $10,000 invested in 1993 and left untouched would be worth over $220,000 by 2024.',src:'S&P Global / Morningstar'},
+  {cat:'GLOBAL DEBT',txt:'Global debt hit a record $313 trillion in 2023 — 3.3x world GDP. The US alone adds ~$1 trillion in national debt every 100 days.',src:'Institute of International Finance'}
+];
+let fi = 0;
+function showFact() {
+  const f = facts[fi];
+  document.getElementById('fact-cat').textContent = f.cat;
+  document.getElementById('fact-txt').textContent = f.txt;
+  document.getElementById('fact-src').textContent = 'SOURCE: ' + f.src;
+  document.getElementById('fact-counter').textContent = (fi+1) + ' / ' + facts.length;
+}
+function nextFact() { fi = (fi+1)%facts.length; showFact(); }
+function prevFact() { fi = (fi-1+facts.length)%facts.length; showFact(); }
+showFact();
+
+/*
+════════════════════════════════════════════════════════════════
+  README — LOCAL CORS PROXY (for PlexyTrade & Forex.com)
+════════════════════════════════════════════════════════════════
+
+Kalshi and Polymarket support browser CORS and will work directly.
+PlexyTrade and Forex.com block cross-origin requests from browsers.
+
+To use those two platforms, run this tiny Node.js proxy locally:
+
+  1. Install Node.js from nodejs.org if you haven't already
+  2. Create a file called proxy.js with this content:
+
+---
+const http = require('http');
+const https = require('https');
+const PORT = 8787;
+http.createServer((req, res) => {
+  res.setHeader('Access-Control-Allow-Origin','*');
+  res.setHeader('Access-Control-Allow-Headers','*');
+  res.setHeader('Access-Control-Allow-Methods','*');
+  if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
+  const target = req.url.slice(1);
+  if (!target.startsWith('http')) { res.writeHead(400); res.end('Bad URL'); return; }
+  const parsed = new URL(target);
+  const opts = { hostname: parsed.hostname, path: parsed.pathname + parsed.search, method: req.method, headers: {...req.headers, host: parsed.hostname} };
+  const proxy = https.request(opts, r => { res.writeHead(r.statusCode, r.headers); r.pipe(res); });
+  req.pipe(proxy);
+  proxy.on('error', e => { res.writeHead(502); res.end(e.message); });
+}).listen(PORT, () => console.log('Proxy running on http://localhost:' + PORT));
+---
+
+  3. Run it: node proxy.js
+  4. Open this HTML file in your browser
+  5. The HUD will route PlexyTrade & Forex.com through your local proxy
+
+════════════════════════════════════════════════════════════════
+*/
+</script>
+</body>
+</html>
